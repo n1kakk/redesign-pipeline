@@ -10,17 +10,80 @@ Generates a modern HTML/CSS version while preserving all original content, image
 
 ## Quick Start
 
+### Запуск напрямую (Python)
 ```bash
 cd /path/to/redesign-pipeline
-
-# Single-command run (Python)
+pip install openai pillow playwright
+npx playwright install chromium
 python run.py --full --vision-backend claude https://example.com
-
-# Single-command run (Docker)
-docker compose run --rm redesign --full https://example.com
 ```
 
-Or spawn sub-agents for each step (see below).
+### Запуск через Docker (одной командой)
+```bash
+cd /path/to/redesign-pipeline
+docker compose build pipeline-worker
+VLLM_KEY='***' ANTHROPIC_API_KEY='***' docker compose run --rm pipeline-worker python run.py --full --vision-backend claude https://example.com
+```
+
+### Запуск через OpenClaw в контейнере
+Поднимается `docker compose up -d openclaw`, агент читает этот SKILL.md
+и spawn'ит sub-агентов. Sub-агенты используют `exec` с `host=pipeline-worker`
+для выполнения шагов внутри контейнера pipeline-worker.
+
+См. раздел **Sub-Agent Orchestration** ниже.
+
+## Sub-Agent Orchestration
+
+Когда OpenClaw работает как оркестратор, он spawn'ит sub-агентов
+для каждого шага. Sub-агент выполняет шаг через `exec` внутри контейнера `pipeline-worker`.
+
+Перед началом убедись что `pipeline-worker` запущен:
+```
+docker compose up -d pipeline-worker
+```
+
+### Схема оркестрации
+
+```
+OpenClaw (оркестратор)
+  ├── spawn → parse-agent
+  │              └── exec: docker exec pipeline-worker python parse/parse_site.py
+  ├── spawn → generate-agent
+  │              └── exec: docker exec pipeline-worker python generate/build_prompt.py --generate
+  ├── spawn → vision-agent
+  │              └── exec: docker exec pipeline-worker node screenshot/original.js
+  │              └── exec: docker exec pipeline-worker python vision/evaluate.py
+  │              └── exec: docker exec pipeline-worker python fix/apply_fixes.py
+  ├── spawn → screenshot-agent
+  │              └── exec: docker exec pipeline-worker node screenshot/redesign.js {site}
+  ├── spawn → qa-agent
+  │              └── exec: docker exec pipeline-worker python qa/quick.py
+  │              └── exec: docker exec pipeline-worker python qa/comprehensive.py
+  └── spawn → judge-agent
+                 └── exec: docker exec pipeline-worker python judge/judge.py
+                 └── [если фикс нужен] → повтор QA → проверка score
+```
+
+### Как spawn'ить sub-агента
+
+```json
+{
+  "task": "Read /workspace/redesign-pipeline/agents/prompts/parse.md and execute each step. URL: https://example.com",
+  "label": "parse-example"
+}
+```
+
+Sub-агент внутри себя выполняет:
+```
+exec: docker exec pipeline-worker curl -sL "https://example.com" -o /app/outputs/raw_homepage.html
+exec: docker exec pipeline-worker python /app/parse/parse_site.py
+```
+
+### Важно
+- Путь внутри контейнера pipeline-worker: `/app/`
+- Рабочая директория OpenClaw: `/workspace/redesign-pipeline/`
+- Результаты сохраняются в `outputs/` и `sites/` — они на volume, живут после перезапуска
+- Sub-агент может просто прочитать промпт из `agents/prompts/` и выполнить его шаги
 
 ## Pipeline Steps
 

@@ -1,31 +1,38 @@
 services:
-  redesign:
-    build: .
-    image: redesign-pipeline:latest
-    container_name: redesign-pipeline
-    stdin_open: true
-    tty: true
+  # ====== OpenClaw Gateway (оркестратор) ======
+  openclaw:
+    container_name: openclaw
+    image: openclaw/openclaw:latest
+    ports:
+      - "18789:18789"
     volumes:
-      # Persist generated sites & temp files outside container
+      # Pipeline код — OpenClaw будет видеть его как workspace
+      - .:/workspace/redesign-pipeline
+      # OpenClaw конфиг (если есть локально)
+      - ./openclaw.json:/openclaw.json:ro
+      # Docker socket — чтобы exec мог запускать pipeline-worker
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - OPENCLAW_GATEWAY_PORT=18789
+      # Пробросить ключи для sub-агентов
+      - VLLM_KEY=${VLLM_KEY}
+      - VLLM_BASE=${VLLM_BASE:-https://rixtrema.net/api/vllm/v1}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - VISION_BACKEND=${VISION_BACKEND:-gateway}
+      - GATEWAY_TOKEN=${GATEWAY_TOKEN}
+    restart: unless-stopped
+
+  # ====== Pipeline Worker (исполняет шаги) ======
+  pipeline-worker:
+    container_name: pipeline-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Результаты сохраняются на host
       - ./outputs:/app/outputs
       - ./sites:/app/sites
-    environment:
-      # --- RixTrema (генерация HTML) ---
-      - VLLM_BASE=${VLLM_BASE:-https://rixtrema.net/api/vllm/v1}
-      - VLLM_KEY=${VLLM_KEY:?VLLM_KEY is required}
-      - VLLM_MODEL=${VLLM_MODEL:-}
-
-      # --- Vision QA backend ---
-      - VISION_BACKEND=${VISION_BACKEND:-gateway}
-
-      # --- Gateway (GPT-4o) ---
-      - GATEWAY_URL=${GATEWAY_URL:-http://host.docker.internal:18789}
-      - GATEWAY_TOKEN=${GATEWAY_TOKEN:-}
-
-      # --- Claude ---
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-6}
-
-      # --- OpenClaw Gateway (для vision через host) ---
-      - HOST_GATEWAY_URL=${GATEWAY_URL:-http://host.docker.internal:18789}
-    command: ["--help"]
+    # Не запускается сам — ждёт команд от openclaw
+    profiles:
+      - worker
+    command: ["tail", "-f", "/dev/null"]
