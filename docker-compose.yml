@@ -1,0 +1,31 @@
+services:
+  redesign:
+    build: .
+    image: redesign-pipeline:latest
+    container_name: redesign-pipeline
+    stdin_open: true
+    tty: true
+    volumes:
+      # Persist generated sites & temp files outside container
+      - ./outputs:/app/outputs
+      - ./sites:/app/sites
+    environment:
+      # --- RixTrema (генерация HTML) ---
+      - VLLM_BASE=${VLLM_BASE:-https://rixtrema.net/api/vllm/v1}
+      - VLLM_KEY=${VLLM_KEY:?VLLM_KEY is required}
+      - VLLM_MODEL=${VLLM_MODEL:-}
+
+      # --- Vision QA backend ---
+      - VISION_BACKEND=${VISION_BACKEND:-gateway}
+
+      # --- Gateway (GPT-4o) ---
+      - GATEWAY_URL=${GATEWAY_URL:-http://host.docker.internal:18789}
+      - GATEWAY_TOKEN=${GATEWAY_TOKEN:-}
+
+      # --- Claude ---
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+
+      # --- OpenClaw Gateway (для vision через host) ---
+      - HOST_GATEWAY_URL=${GATEWAY_URL:-http://host.docker.internal:18789}
+    command: ["--help"]

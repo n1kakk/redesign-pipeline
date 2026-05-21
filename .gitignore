@@ -1,0 +1,21 @@
+# Generated sites & temp files
+sites/
+outputs/
+
+# API keys
+.env
+.env.local
+config/.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
