@@ -17,4 +17,6 @@ services:
       - GATEWAY_TOKEN=${GATEWAY_TOKEN:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-6}
-    command: ["--help"]
+    # Фоновый режим: контейнер висит и ждёт exec команд
+    # Для разового запуска: docker compose run --rm redesign --full https://...
+    command: ["tail", "-f", "/dev/null"]
